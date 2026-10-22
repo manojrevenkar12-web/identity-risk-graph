@@ -15,7 +15,7 @@ spec:
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: estate
-          image: irg
+          image: ghcr.io/manojrevenkar12-web/identity-risk-graph  # rewritten to irg:ci by the overlay
           args: [estate, -humans, "2000", -addr, ":9090"]
           env:
             - name: IRG_ESTATE_TOKEN
