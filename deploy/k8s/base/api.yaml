@@ -21,7 +21,7 @@ spec:
       serviceAccountName: irg
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
-      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
       topologySpreadConstraints:
         - {maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: irg-api}}}
         - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: irg-api}}}
@@ -45,7 +45,7 @@ spec:
             limits: {cpu: "1", memory: 1Gi}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           volumeMounts: [{name: secrets, mountPath: /var/run/secrets/irg, readOnly: true}]
-      volumes: [{name: secrets, secret: {secretName: irg-secrets, defaultMode: 0400}}]
+      volumes: [{name: secrets, secret: {secretName: irg-secrets, defaultMode: 0440}}]  # group-readable; fsGroup gives the app group ownership
 ---
 apiVersion: v1
 kind: ServiceAccount

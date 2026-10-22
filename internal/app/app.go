@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -42,11 +43,15 @@ type Config struct {
 
 // env reads K, or the file named by K_FILE (secrets mounted as files, not environment
 // variables, which leak into /proc and crash dumps).
+// An unreadable K_FILE is a fatal misconfiguration, never a silent fall-back to the default.
 func env(k, def string) string {
 	if f := os.Getenv(k + "_FILE"); f != "" {
-		if b, err := os.ReadFile(f); err == nil { //nolint:gosec // the path comes from the operator's own configuration
-			return strings.TrimSpace(string(b))
+		b, err := os.ReadFile(f) //nolint:gosec // the path comes from the operator's own configuration
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %s_FILE: %v\n", k, err)
+			os.Exit(2)
 		}
+		return strings.TrimSpace(string(b))
 	}
 	if v := os.Getenv(k); v != "" {
 		return v

@@ -22,11 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: {go-version: stable} # newest Go: govulncheck then reports only what a patch release cannot fix
+        with: {go-version: "1.25"} # newest Go the pinned linter can read; still a supported release, so govulncheck sees patched stdlib
       - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
       - uses: golangci/golangci-lint-action@v8
-        with: {version: v2.5.0, install-mode: goinstall} # built with the runner's Go, so a newer Go never breaks lint
+        with: {version: v2.5.0}
       - run: go test -race -count=1 ./...
       - name: Fuzz the IAM wildcard matcher (30 s)
         run: go test -run='^$' -fuzz=FuzzWildcardNoPanic -fuzztime=30s ./internal/awsiam/
