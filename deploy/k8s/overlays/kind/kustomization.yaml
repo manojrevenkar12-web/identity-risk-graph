@@ -3,7 +3,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: irg
-resources: [../../base, postgres.yaml, estate.yaml]
+resources: [../../base, postgres.yaml, estate.yaml, nodeport-policy.yaml]
 configMapGenerator:
   - name: irg-config
     behavior: merge

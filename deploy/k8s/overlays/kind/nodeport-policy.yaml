@@ -1,0 +1,12 @@
+# CI only: the smoke test reaches the API through NodePort 30080 from the kind host, which arrives
+# from the node's address rather than from a pod or the ingress controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-nodeport-ci
+spec:
+  podSelector: {matchLabels: {app: irg-api}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ipBlock: {cidr: 0.0.0.0/0}}]
+      ports: [{port: 8080}]
