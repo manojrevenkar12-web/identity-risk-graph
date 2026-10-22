@@ -26,7 +26,7 @@ jobs:
       - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
       - uses: golangci/golangci-lint-action@v8
-        with: {version: v2.5.0}
+        with: {version: v2.5.0, install-mode: goinstall} # built with the runner's Go, so a newer Go never breaks lint
       - run: go test -race -count=1 ./...
       - name: Fuzz the IAM wildcard matcher (30 s)
         run: go test -run='^$' -fuzz=FuzzWildcardNoPanic -fuzztime=30s ./internal/awsiam/
@@ -83,11 +83,10 @@ jobs:
           kubectl -n irg rollout status deployment/api --timeout=180s
           kubectl -n irg rollout status deployment/worker --timeout=180s
           kubectl -n irg get pods,svc,hpa,pdb
-      - run: scripts/k8s-smoke.sh
+      - run: scripts/k8s-smoke.sh 2>&1 | tee smoke.log
+        shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: loadtest-k8s, path: loadtest-k8s.json, if-no-files-found: ignore}
       - if: failure()
-        run: |
-          kubectl -n irg get pods -o wide; kubectl -n irg describe pods | tail -n 60
-          kubectl -n irg logs deployment/api --tail=80; kubectl -n irg logs deployment/worker --tail=80
+        run: scripts/ci-diagnose.sh
