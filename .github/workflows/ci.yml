@@ -34,9 +34,10 @@ jobs:
         with: {go-version: stable}
       - name: govulncheck (findings are published as annotations)
         run: |
-          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... > vuln.txt 2>&1 && { tail -n 3 vuln.txt; exit 0; }
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > vuln.txt 2>&1 && { tail -n 3 vuln.txt; exit 0; }
           cat vuln.txt
           grep -E '^Vulnerability #|Found in:|Fixed in:' vuln.txt | head -n 30 | while read -r l; do echo "::error title=govulncheck::$l"; done
+          grep -qE '^Vulnerability #' vuln.txt || tail -n 8 vuln.txt | while read -r l; do echo "::error title=govulncheck error::$l"; done
           exit 1
       - name: Benchmarks (detection vs naive scanner, scale to 10k people, decision latency)
         run: go run ./cmd/irg bench -out ci-reports -max-humans 10000
