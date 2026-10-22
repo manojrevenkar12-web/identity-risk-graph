@@ -1,0 +1,33 @@
+# CI cluster: PostgreSQL in-cluster, the demo SaaS estate, the image loaded with `kind load`, and
+# the API on NodePort 30080 (mapped to localhost by deploy/kind/cluster.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: irg
+resources: [../../base, postgres.yaml, estate.yaml]
+configMapGenerator:
+  - name: irg-config
+    behavior: merge
+    literals: [IRG_API_RATE=100000, IRG_API_BURST=100000, IRG_AGENT_RATE=100000, IRG_AGENT_BURST=100000, IRG_SYNC_INTERVAL=1h]  # CI load test
+secretGenerator:
+  - name: irg-secrets
+    literals:
+      - DATABASE_URL=postgres://irg:irg-ci-password@postgres:5432/irg?sslmode=disable
+      - IRG_ESTATE_TOKEN=ci-estate-token
+      - IRG_ESTATE_URL=http://estate:9090
+  - name: postgres
+    literals: [POSTGRES_USER=irg, POSTGRES_PASSWORD=irg-ci-password, POSTGRES_DB=irg]
+images:
+  - name: ghcr.io/manojrevenkar12-web/identity-risk-graph
+    newName: irg
+    newTag: ci
+patches:
+  - target: {kind: Deployment, name: "api|worker|estate"}
+    patch: |
+      - {op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Never}
+  - target: {kind: Deployment, name: "api|worker"}
+    patch: |
+      - {op: replace, path: /spec/template/spec/containers/0/resources/requests/cpu, value: 100m}
+  - target: {kind: Service, name: api}
+    patch: |
+      - {op: add, path: /spec/type, value: NodePort}
+      - {op: add, path: /spec/ports/0/nodePort, value: 30080}

@@ -1,0 +1,18 @@
+{
+  "concurrency": 32,
+  "errors": 0,
+  "latency_ms": {
+    "max": 71.189,
+    "p50": 1.723,
+    "p95": 5.976,
+    "p99": 9.619
+  },
+  "outcomes": {
+    "allow": 189408,
+    "deny": 104086
+  },
+  "requests": 293494,
+  "requests_per_second": 14658,
+  "seconds": 20.021,
+  "setup": "HTTP POST /v1/agents/decide through auth, rate limiter, decision engine and asynchronous decision logging to PostgreSQL (every decision persisted: 293,494 of 293,494); one irg process; API, PostgreSQL and the load generator share one 2-vCPU machine; 2,000-person company; 32 agent keys; per-key limits raised for the test"
+}

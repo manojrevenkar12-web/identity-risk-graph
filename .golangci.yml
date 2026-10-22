@@ -1,0 +1,22 @@
+version: "2"
+linters:
+  enable: [errcheck, govet, staticcheck, ineffassign, unused, gosec, bodyclose, errorlint, misspell, nilerr, sqlclosecheck]
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Conn).Close
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+    gosec:
+      excludes:
+        - G115 # integer conversions: bounded values (latency in µs, counts)
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck]
+formatters:
+  enable: [gofmt]

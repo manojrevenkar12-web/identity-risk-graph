@@ -1,0 +1,146 @@
+{
+  "by_rule": {
+    "ai_agent_risk": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1,
+        "rule": "agent without owner, or with any role other than read-only by name"
+      },
+      "planted": 90
+    },
+    "dormant_privileged": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 65,
+        "precision": 0.5,
+        "recall": 1,
+        "rule": "no sign-in for 90 days (ignores what the identity can reach)"
+      },
+      "planted": 65
+    },
+    "external_privileged": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 100,
+        "precision": 0.231,
+        "recall": 1,
+        "rule": "external email domain (ignores access)"
+      },
+      "planted": 30
+    },
+    "offboarding_gap": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 100,
+        "precision": 0.5,
+        "recall": 1,
+        "rule": "HR says terminated (ignores whether the account is already deprovisioned)"
+      },
+      "planted": 100
+    },
+    "privilege_escalation": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 630,
+        "precision": 0.094,
+        "recall": 1,
+        "rule": "reaches a policy whose text mentions iam: or Action * (ignores NotAction, scoping and conditions)"
+      },
+      "planted": 65
+    },
+    "privileged_without_mfa": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 15,
+        "precision": 0,
+        "recall": 0,
+        "rule": "no MFA and member of an admin group or holder of a role named *Admin* (ignores MFA conditions in policies)"
+      },
+      "planted": 50
+    },
+    "risky_oauth_app": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 25,
+        "precision": 0.615,
+        "recall": 1,
+        "rule": "any high-risk scope (ignores verified publishers)"
+      },
+      "planted": 40
+    },
+    "stale_credential": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 80,
+        "precision": 0.5,
+        "recall": 1,
+        "rule": "key older than 90 days (ignores what the key can do)"
+      },
+      "planted": 80
+    },
+    "toxic_combination": {
+      "graph_engine": {
+        "false_positives": 0,
+        "precision": 1,
+        "recall": 1
+      },
+      "naive_scanner": {
+        "false_positives": 630,
+        "precision": 0.08,
+        "recall": 1,
+        "rule": "reaches a policy mentioning cloudtrail or Action * (ignores Deny statements)"
+      },
+      "planted": 55
+    }
+  },
+  "caveat": "Ground truth is planted by the generator, so this measures whether the logic is right on known cases, not recall on a real estate.",
+  "setup": "5 synthetic companies (seeds [1 2 3 4 5]), 2000 people each, 11765 identities in total; planted risks plus deliberate near-misses",
+  "summary": {
+    "graph_engine": {
+      "false_positives": 0,
+      "precision": 1,
+      "recall": 1,
+      "true_positives": 575
+    },
+    "naive_scanner": {
+      "false_positives": 1645,
+      "precision": 0.242,
+      "recall": 0.913,
+      "true_positives": 525
+    }
+  }
+}

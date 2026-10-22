@@ -1,0 +1,35 @@
+[
+  {
+    "analysis_seconds": 0.021,
+    "cpus": 2,
+    "edges": 3155,
+    "findings": 115,
+    "identities": 2353,
+    "nodes": 2393,
+    "peak_heap_mb": 2.818,
+    "people": 2000,
+    "snapshot_mb": 0.764
+  },
+  {
+    "analysis_seconds": 0.126,
+    "cpus": 2,
+    "edges": 31717,
+    "findings": 585,
+    "identities": 11776,
+    "nodes": 11816,
+    "peak_heap_mb": 24.027,
+    "people": 10000,
+    "snapshot_mb": 5.259
+  },
+  {
+    "analysis_seconds": 0.959,
+    "cpus": 2,
+    "edges": 537661,
+    "findings": 2931,
+    "identities": 58889,
+    "nodes": 58929,
+    "peak_heap_mb": 244.376,
+    "people": 50000,
+    "snapshot_mb": 61.759
+  }
+]

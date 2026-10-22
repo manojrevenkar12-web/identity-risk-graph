@@ -1,0 +1,48 @@
+# The demo SaaS estate (a synthetic 2,000-person company) that connectors read and enforcement writes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: estate
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: estate}
+  template:
+    metadata:
+      labels: {app: estate}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: estate
+          image: irg
+          args: [estate, -humans, "2000", -addr, ":9090"]
+          env:
+            - name: IRG_ESTATE_TOKEN
+              valueFrom: {secretKeyRef: {name: irg-secrets, key: IRG_ESTATE_TOKEN}}
+          ports: [{containerPort: 9090, name: http}]
+          readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 3}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 15}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: estate
+spec:
+  selector: {app: estate}
+  ports: [{port: 9090, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: estate-clients
+spec:
+  podSelector: {matchLabels: {app: estate}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: irg-worker}}}]
+      ports: [{port: 9090}]

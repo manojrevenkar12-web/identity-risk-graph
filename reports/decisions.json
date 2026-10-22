@@ -1,0 +1,17 @@
+{
+  "all_cores_per_second": 579890,
+  "cpus": 2,
+  "latency_us": {
+    "max": 1330.523,
+    "p50": 2.72,
+    "p95": 8.664,
+    "p99": 18.913
+  },
+  "outcomes": {
+    "allow": 108309,
+    "deny": 86251,
+    "require_approval": 5440
+  },
+  "setup": "5000 people, 245 agents, 200000 decisions, in-process (no HTTP)",
+  "single_core_per_second": 273205
+}

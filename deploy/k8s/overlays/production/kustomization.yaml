@@ -1,0 +1,26 @@
+# Production on EKS (deploy/terraform): RDS PostgreSQL, secrets from AWS Secrets Manager through
+# the External Secrets Operator (the ExternalSecret below), IRSA for Bedrock and Secrets Manager.
+# IRSA injects its own projected web-identity token, so the Kubernetes API token stays unmounted.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: irg
+resources: [../../base, external-secret.yaml]
+images:
+  - name: ghcr.io/manojrevenkar12-web/identity-risk-graph
+    newTag: v1.0.0
+patches:
+  - target: {kind: ServiceAccount, name: irg}
+    patch: |
+      - {op: add, path: /metadata/annotations, value: {eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/irg-app"}}
+  # The release pipeline replaces the tag with the image digest it built, signed and scanned
+  # (kustomize edit set image ...@sha256:...); Always is then harmless and guards against a stale node cache.
+  - target: {kind: Deployment, name: "api|worker"}
+    patch: |
+      - {op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: Always}
+      - {op: add, path: /metadata/annotations, value: {checkov.io/skip1: "CKV_K8S_43=digest is set by the release pipeline, not committed"}}
+  - target: {kind: HorizontalPodAutoscaler, name: api}
+    patch: |
+      - {op: replace, path: /spec/minReplicas, value: 3}
+  - target: {kind: PodDisruptionBudget, name: api}
+    patch: |
+      - {op: replace, path: /spec/minAvailable, value: 2}

@@ -1,0 +1,93 @@
+name: ci
+on:
+  push: {branches: [main]}
+  pull_request:
+
+concurrency: {group: "${{ github.workflow }}-${{ github.ref }}", cancel-in-progress: true}
+permissions: {contents: read}
+
+jobs:
+  go:
+    name: go (lint, gosec, race tests on PostgreSQL, fuzz, govulncheck, benchmarks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 20
+    env:
+      IRG_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: stable} # newest Go: govulncheck then reports only what a patch release cannot fix
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@v8
+        with: {version: v2.5.0}
+      - run: go test -race -count=1 ./...
+      - name: Fuzz the IAM wildcard matcher (30 s)
+        run: go test -run='^$' -fuzz=FuzzWildcardNoPanic -fuzztime=30s ./internal/awsiam/
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - name: Benchmarks (detection vs naive scanner, scale to 10k people, decision latency)
+        run: go run ./cmd/irg bench -out ci-reports -max-humans 10000
+      - uses: actions/upload-artifact@v4
+        with: {name: ci-reports, path: ci-reports}
+
+  iac:
+    name: infrastructure as code (terraform validate, checkov on Terraform, Kubernetes, Dockerfile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: terraform fmt and validate
+        working-directory: deploy/terraform
+        run: terraform fmt -check -recursive && terraform init -backend=false -input=false && terraform validate
+      - name: Render the production and CI overlays
+        run: |
+          mkdir -p rendered
+          kubectl kustomize deploy/k8s/overlays/production > rendered/production.yaml
+          kubectl kustomize deploy/k8s/overlays/kind > rendered/kind.yaml
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.32.0 rendered/production.yaml rendered/kind.yaml
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - run: pip install -q checkov==3.3.30
+      - name: checkov (fails on any unsuppressed finding; suppressions carry their reason in the file)
+        run: |
+          checkov -d deploy/terraform --framework terraform --compact --quiet
+          checkov -f rendered/production.yaml --framework kubernetes --compact --quiet
+          checkov -f Dockerfile --framework dockerfile --compact --quiet
+
+  kubernetes:
+    name: kind (deploy, sync, four-eyes remediation, agent decisions, rollout under load)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: stable}
+      - run: go build -o bin/irg ./cmd/irg
+      - run: docker build --build-arg VERSION=${{ github.sha }} -t irg:ci . && docker image ls irg:ci
+      - uses: helm/kind-action@v1
+        with: {cluster_name: irg, config: deploy/kind/cluster.yaml}
+      - name: Deploy (PostgreSQL, demo estate, API ×2, worker ×2)
+        run: |
+          kind load docker-image irg:ci --name irg
+          kubectl apply -k deploy/k8s/overlays/kind
+          kubectl -n irg rollout status statefulset/postgres --timeout=180s
+          kubectl -n irg rollout status deployment/estate --timeout=120s
+          kubectl -n irg rollout status deployment/api --timeout=180s
+          kubectl -n irg rollout status deployment/worker --timeout=180s
+          kubectl -n irg get pods,svc,hpa,pdb
+      - run: scripts/k8s-smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: loadtest-k8s, path: loadtest-k8s.json, if-no-files-found: ignore}
+      - if: failure()
+        run: |
+          kubectl -n irg get pods -o wide; kubectl -n irg describe pods | tail -n 60
+          kubectl -n irg logs deployment/api --tail=80; kubectl -n irg logs deployment/worker --tail=80

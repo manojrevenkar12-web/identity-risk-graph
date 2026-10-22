@@ -1,0 +1,10 @@
+bin/
+*.log
+agent-keys.json
+loadtest.json
+loadtest-k8s.json
+ci-reports/
+rendered/
+deploy/terraform/.terraform/
+deploy/terraform/.terraform.lock.hcl
+deploy/terraform/*.tfstate*

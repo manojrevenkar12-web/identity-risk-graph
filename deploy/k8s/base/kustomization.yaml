@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: irg
+labels:
+  - pairs: {app.kubernetes.io/part-of: identity-risk-graph}
+    includeSelectors: false
+resources: [namespace.yaml, api.yaml, worker.yaml, networkpolicy.yaml]
+configMapGenerator:
+  - name: irg-config
+    literals:
+      - IRG_ADDR=:8080
+      - IRG_SYNC_INTERVAL=15m
+      - IRG_MAX_PLAN_ACTIONS=25
+      - IRG_AGENT_RATE=50
+      - IRG_AGENT_BURST=100
+      - IRG_API_RATE=100
+      - IRG_API_BURST=200
+      - IRG_OIDC_AUDIENCE=irg
+images:
+  - name: irg
+    newName: ghcr.io/manojrevenkar12-web/identity-risk-graph
+    newTag: latest

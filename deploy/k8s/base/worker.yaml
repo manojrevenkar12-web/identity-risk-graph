@@ -1,0 +1,46 @@
+# Workers claim jobs with FOR UPDATE SKIP LOCKED: replicas never run the same job, and a job
+# whose worker died is picked up again when its lease expires.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: irg-worker}
+  template:
+    metadata:
+      labels: {app: irg-worker}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "9100", prometheus.io/path: /metrics}
+    spec:
+      serviceAccountName: irg
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: worker
+          image: irg
+          args: [worker]
+          envFrom: [{configMapRef: {name: irg-config}}]
+          env:
+            - {name: DATABASE_URL_FILE, value: /var/run/secrets/irg/DATABASE_URL}
+            - {name: IRG_ESTATE_TOKEN_FILE, value: /var/run/secrets/irg/IRG_ESTATE_TOKEN}
+            - {name: IRG_ESTATE_URL_FILE, value: /var/run/secrets/irg/IRG_ESTATE_URL}
+          ports: [{containerPort: 9100, name: ops}]
+          readinessProbe: {httpGet: {path: /readyz, port: ops}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /healthz, port: ops}, periodSeconds: 15, failureThreshold: 3}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi} # whole-org analysis: ~250 MB at 50k people (reports/scale.json)
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: secrets, mountPath: /var/run/secrets/irg, readOnly: true}]
+      volumes: [{name: secrets, secret: {secretName: irg-secrets, defaultMode: 0400}}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app: irg-worker}
