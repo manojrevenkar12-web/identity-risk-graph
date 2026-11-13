@@ -1,0 +1,19 @@
+{
+  "audit_events": 2000,
+  "agent_decisions": 50000,
+  "decisions_to_export": 19909,
+  "injected_busy_share": 0.2,
+  "injected_lost_ack_share": 0.03,
+  "requests": 141,
+  "busy_replies": 29,
+  "lost_acknowledgements": 2,
+  "events_expected": 21909,
+  "events_stored_at_least_once": 21909,
+  "events_missing": 0,
+  "duplicate_deliveries": 400,
+  "events_from_other_tenants": 0,
+  "plain_allows_exported": 0,
+  "rounds": 2,
+  "seconds": 1.4139323,
+  "events_per_second": 15495.084170578748
+}

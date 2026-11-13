@@ -20,7 +20,14 @@ estate APIs ──► connector ──► snapshot ──► graph + IAM evaluat
   Workspace,       idempotent                 MFA / no MFA / key)               │
   agents)          writes) ◄── apply/rollback ◄── four-eyes plan ◄── dry run ◄──┘
                                                                          AI agent ──► /v1/agents/decide
+ audit log + agent decisions ──► SIEM export (Splunk HEC, Microsoft Sentinel; ECS events, cursor per sink)
+ every request, job and estate call ──► OpenTelemetry traces (OTLP/HTTP) ──► Collector ──► Tempo / Grafana
 ```
+
+![The CISO dashboard: highest risks with their attack paths, risks by control, and why the numbers hold](docs/img/dashboard.png)
+
+`web/` is the dashboard above (React, TanStack Query, Framer Motion). `irg dashboard` writes its data
+from the engine and the committed reports; nothing in it is typed by hand.
 
 ## What was measured
 
@@ -116,6 +123,51 @@ Each finding carries:
     Multi-AZ RDS PostgreSQL (TLS only, IAM authentication, enhanced monitoring), IMDSv2 nodes,
     and a least-privilege IRSA role.
 
+## Security operations: SIEM export and tracing
+
+**SIEM export.** Every audit-log entry (plans applied and rolled back, risks accepted, grants
+approved, keys created) and every AI-agent decision that was not a plain allow goes to the customer's
+SIEM as an [Elastic Common Schema](https://www.elastic.co/guide/en/ecs/current/index.html) event:
+
+- **Splunk** through the HTTP Event Collector, **Microsoft Sentinel** through the Azure Monitor Logs
+  Ingestion API (Entra ID client-credentials token, requests split under 1 MB).
+- One cursor per tenant, sink and stream in PostgreSQL (row-level security like everything else),
+  moved only after the sink acknowledged the batch: **at-least-once**, with a stable event id so the
+  SIEM can drop the rare duplicate.
+- Busy replies and timeouts are retried with backoff (and `Retry-After`); a sink that rejects us
+  (bad token, bad schema) is alerted on and **skips nothing**, while the other sinks carry on.
+- Agent decisions are read after a 10-second settling window, because concurrent API replicas can
+  commit a lower id after a higher one; the audit log needs none (appends are serialised per tenant).
+
+`irg siem-drill` measures it against a SIEM that answers 20% of requests "busy" and loses 3% of its
+acknowledgements after storing the events ([reports/siem.json](reports/siem.json)):
+
+| | |
+|---|---|
+| Security events to deliver (2,000 audit entries, 19,909 of 50,000 decisions that were not plain allows) | 21,909 |
+| **Missing at the SIEM** | **0** |
+| Busy replies, lost acknowledgements | 29, 2 |
+| Duplicate deliveries (only from the lost acknowledgements, each with the same event id) | 400 |
+| Events from another tenant, plain allows exported | 0, 0 |
+
+**OpenTelemetry tracing.** The API, the worker and the connector record spans and send them over
+OTLP/HTTP to any OpenTelemetry Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`). The W3C `traceparent` header
+is continued from the caller and **carried through the job queue**, so one trace runs from
+`POST /v1/sync` through the sync job, every estate API call and the analysis job it schedules. An
+agent's decision is a span with its agent, action, resource, decision and reason. The tracer is the
+standard library only, like the metrics; a full queue drops spans instead of blocking a request,
+and two spans cost about 1.7 µs. CI sends spans to a real OpenTelemetry Collector and requires it to
+write out every one. [deploy/observability/otel-collector.yaml](deploy/observability/otel-collector.yaml)
+keeps every failed trace and every denied agent action, 10% of the rest, and forwards to Tempo.
+
+**Dashboards and alerts.** A Grafana board
+([grafana-dashboard.json](deploy/observability/grafana-dashboard.json)) for identity risk, agent
+decisions, the API, jobs, SIEM delivery and tracing, and Prometheus alerts
+([prometheus-rules.yml](deploy/observability/prometheus-rules.yml)): a multi-window burn rate on the
+99.9% API budget, slow agent decisions, a SIEM rejecting events or falling behind, dropped spans, a
+critical identity risk open for an hour. The alerts are unit-tested with `promtool`, and a Go test
+checks that every metric the board and the alerts query is one the code registers.
+
 ## Run it
 
 ```bash
@@ -133,11 +185,14 @@ IRG_ESTATE_TOKEN= bin/irg all                                     # API on :8080
 curl -H "Authorization: Bearer $KEY" -X POST localhost:8080/v1/sync
 curl -H "Authorization: Bearer $KEY" localhost:8080/v1/posture
 bin/irg bench -out reports                                        # regenerate the reports
+bin/irg siem-drill -out reports/siem.json                         # SIEM delivery under failure
+bin/irg dashboard && (cd web && npm install && npm run dev)       # the CISO dashboard
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 bin/irg all     # with traces to a collector
 ```
 
 ## CI
 
-Every push runs three jobs:
+Every push runs these jobs:
 
 - **go:** gofmt, vet, golangci-lint with gosec, race tests against PostgreSQL, 30 s of fuzzing,
   govulncheck, and the benchmarks.
@@ -148,6 +203,10 @@ Every push runs three jobs:
   then runs the whole flow (tenant, sync, analysis, four-eyes plan, apply, verified resolved,
   audit chain intact, agent decisions), and a **rolling restart under load that must drop zero
   requests**.
+- **otel:** starts an OpenTelemetry Collector, exports spans to it, and requires all of them in its
+  output; validates the production collector config.
+- **observability:** `promtool` checks and unit-tests the alert rules.
+- **dashboard:** the CISO dashboard's tests and build.
 
 ## Leadership documents
 

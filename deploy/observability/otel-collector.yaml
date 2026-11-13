@@ -1,0 +1,40 @@
+# Production: the API and worker send OTLP/HTTP here (OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318).
+# The collector drops health-check noise, keeps every failed trace and 10% of the rest, and forwards to Tempo.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  filter/health:
+    traces:
+      span:
+        - 'attributes["http.route"] == "GET /healthz"'
+        - 'attributes["http.route"] == "GET /readyz"'
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+      - name: errors
+        type: status_code
+        status_code: { status_codes: [ERROR] }
+      - name: denied-agent-actions
+        type: string_attribute
+        string_attribute: { key: irg.decision, values: [deny, require_approval] }
+      - name: the-rest
+        type: probabilistic
+        probabilistic: { sampling_percentage: 10 }
+  batch: {}
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls: { insecure: true }
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/health, tail_sampling, batch]
+      exporters: [otlp/tempo]

@@ -1,0 +1,63 @@
+# Alerts for identity-risk-graph. Thresholds follow the SLOs in docs/RUNBOOK.md; unit-tested with
+#   promtool test rules deploy/observability/prometheus-rules.test.yml
+groups:
+  - name: irg-slo
+    rules:
+      - record: irg:http_errors:ratio_rate5m
+        expr: sum(rate(irg_http_requests_total{code=~"5.."}[5m])) / clamp_min(sum(rate(irg_http_requests_total[5m])), 1e-9)
+      - record: irg:http_errors:ratio_rate1h
+        expr: sum(rate(irg_http_requests_total{code=~"5.."}[1h])) / clamp_min(sum(rate(irg_http_requests_total[1h])), 1e-9)
+      # 99.9% availability: page when the last hour burns the monthly budget 14.4x faster than allowed
+      - alert: IrgAPIErrorBudgetBurn
+        expr: irg:http_errors:ratio_rate5m > 14.4 * 0.001 and irg:http_errors:ratio_rate1h > 14.4 * 0.001
+        for: 2m
+        labels: {severity: page, team: platform}
+        annotations:
+          summary: API 5xx rate is burning the 99.9% error budget
+          runbook: docs/RUNBOOK.md#api-errors
+      # agents ask before they act: a slow answer stalls every agent in the company
+      - alert: IrgAgentDecisionSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(irg_agent_decision_seconds_bucket[5m]))) > 0.001
+        for: 10m
+        labels: {severity: page, team: platform}
+        annotations:
+          summary: p99 agent decision time inside the engine is above 1 ms
+          runbook: docs/RUNBOOK.md#agent-decisions
+      - alert: IrgDecisionLogDropping
+        expr: increase(irg_decision_log_dropped_total[10m]) > 0
+        labels: {severity: ticket, team: platform}
+        annotations:
+          summary: agent decisions are being answered but not logged (buffer full)
+  - name: irg-pipeline
+    rules:
+      - alert: IrgJobsFailing
+        expr: sum by (kind) (increase(irg_jobs_total{outcome="error"}[30m])) > 3
+        labels: {severity: ticket, team: platform}
+        annotations:
+          summary: '{{ $labels.kind }} jobs keep failing'
+      - alert: IrgSIEMSinkRejecting
+        expr: max by (sink) (irg_siem_sink_blocked) == 1
+        for: 5m
+        labels: {severity: page, team: security}
+        annotations:
+          summary: '{{ $labels.sink }} rejects our events (token or schema); nothing is skipped, but nothing arrives'
+      - alert: IrgSIEMBehind
+        expr: max by (sink, stream) (irg_siem_delivery_lag_seconds) > 900
+        for: 15m
+        labels: {severity: ticket, team: security}
+        annotations:
+          summary: '{{ $labels.sink }} receives {{ $labels.stream }} more than 15 minutes late'
+      - alert: IrgTracesDropped
+        expr: sum(rate(irg_trace_spans_total{outcome=~"dropped|failed"}[10m])) > 1
+        for: 10m
+        labels: {severity: ticket, team: platform}
+        annotations:
+          summary: spans are being dropped; the collector is slow or unreachable
+  - name: irg-security
+    rules:
+      - alert: IrgCriticalIdentityRiskOpen
+        expr: max by (tenant) (irg_open_findings{severity="critical"}) > 0
+        for: 1h
+        labels: {severity: ticket, team: security}
+        annotations:
+          summary: a critical identity risk has been open for an hour in tenant {{ $labels.tenant }}

@@ -17,6 +17,7 @@ import (
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/awsiam"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/estate"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/model"
+	"github.com/manojrevenkar12-web/identity-risk-graph/internal/trace"
 )
 
 type Client struct {
@@ -42,7 +43,15 @@ func (c *Client) do(ctx context.Context, method, path string, body any, idem str
 	if body != nil {
 		payload, _ = json.Marshal(body)
 	}
+	ctx, span := trace.Start(ctx, method+" estate "+routeOf(path), trace.Client,
+		trace.String("http.request.method", method), trace.String("server.address", c.Base))
 	var last error
+	defer func() {
+		if last != nil {
+			span.Fail(last.Error())
+		}
+		span.End()
+	}()
 	for attempt := 0; attempt < 4; attempt++ {
 		if attempt > 0 {
 			select {
@@ -55,6 +64,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, idem str
 		if err != nil {
 			return err
 		}
+		trace.Inject(ctx, req.Header)
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 		req.Header.Set("Content-Type", "application/json")
 		if idem != "" {
@@ -71,9 +81,12 @@ func (c *Client) do(ctx context.Context, method, path string, body any, idem str
 			last = &httpError{resp.StatusCode, string(b)}
 			continue
 		}
+		span.SetAttributes(trace.Int("http.response.status_code", resp.StatusCode), trace.Int("irg.attempts", attempt+1))
 		if resp.StatusCode >= 300 {
-			return &httpError{resp.StatusCode, string(b)}
+			last = &httpError{resp.StatusCode, string(b)}
+			return last
 		}
+		last = nil
 		if out != nil {
 			return json.Unmarshal(b, out)
 		}
@@ -303,4 +316,18 @@ func (c *Client) Apply(ctx context.Context, a model.Action, idem string) (*model
 		return inverse(map[string]string{"quarantine_agent": "release_agent", "release_agent": "quarantine_agent"}[a.Type]), nil
 	}
 	return nil, fmt.Errorf("unknown action type %q", a.Type)
+}
+
+// routeOf keeps span names low-cardinality: ids and cursors are not part of the name.
+func routeOf(path string) string {
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	parts := strings.Split(path, "/")
+	for i, p := range parts {
+		if len(p) > 24 || strings.ContainsAny(p, "0123456789") && len(p) > 6 {
+			parts[i] = "{id}"
+		}
+	}
+	return strings.Join(parts, "/")
 }

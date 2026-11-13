@@ -11,7 +11,13 @@
 
 ## Alerts and what to do
 
-### Agent decision latency or errors high (page)
+### API errors <a id="api-errors"></a>
+
+`IrgAPIErrorBudgetBurn` pages when both the 5-minute and the 1-hour 5xx ratio burn the 99.9% budget
+14.4 times too fast. Find the failing route on the Grafana board (Requests by route and status),
+then the trace: every response carries a `traceparent` header, and failed traces are always kept.
+
+### Agent decision latency or errors high (page) <a id="agent-decisions"></a>
 
 1. Check `irg_agent_decision_seconds`. If the engine is fast but HTTP is slow, the API pods are
    saturated: check the HPA (`kubectl -n irg get hpa api`).
@@ -19,6 +25,13 @@
    last keys working during an IdP outage.
 3. A 429 spike: an agent is looping. Find it in `decisions` (`agent_id`, last 5 minutes),
    contact its owner, and quarantine it in the agent registry if needed.
+
+### SIEM rejecting events or behind (page / ticket)
+
+`IrgSIEMSinkRejecting`: a sink answers 401/403/400. Nothing is skipped: its cursor stays where it was
+and the events go out once the token or the table schema is fixed (Splunk HEC token, or the Sentinel
+app registration's secret and its role on the data collection rule). `IrgSIEMBehind`: the sink is
+slow or busy; check `irg_siem_events_total{outcome="retried"}` and the sink's own health.
 
 ### Job backlog (page if the oldest queued job is more than 15 min old)
 

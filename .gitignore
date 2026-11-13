@@ -8,3 +8,5 @@ rendered/
 deploy/terraform/.terraform/
 deploy/terraform/.terraform.lock.hcl
 deploy/terraform/*.tfstate*
+web/node_modules/
+web/dist/

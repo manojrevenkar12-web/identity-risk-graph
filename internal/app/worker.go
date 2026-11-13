@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/connector"
@@ -15,6 +16,7 @@ import (
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/model"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/risk"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/store"
+	"github.com/manojrevenkar12-web/identity-risk-graph/internal/trace"
 )
 
 const lease = 10 * time.Minute
@@ -74,6 +76,14 @@ func (a *App) WorkOnce(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	t0 := time.Now()
+	var carried struct {
+		Traceparent string `json:"traceparent"`
+	}
+	_ = json.Unmarshal(job.Payload, &carried)
+	h := http.Header{}
+	h.Set("traceparent", carried.Traceparent)
+	ctx, span := trace.Start(trace.Extract(ctx, h), "job "+job.Kind, trace.Internal, trace.String("irg.tenant", job.Tenant),
+		trace.Int("irg.job.id", int(job.ID)), trace.Int("irg.job.attempt", job.Attempts))
 	var jobErr error
 	switch job.Kind {
 	case "sync":
@@ -94,6 +104,10 @@ func (a *App) WorkOnce(ctx context.Context) (bool, error) {
 		outcome = "error"
 		a.Log.Warn("job failed", "id", job.ID, "kind", job.Kind, "tenant", job.Tenant, "attempt", job.Attempts, "err", jobErr)
 	}
+	if jobErr != nil {
+		span.Fail(jobErr.Error())
+	}
+	span.End()
 	mJobs.Inc(job.Kind, outcome)
 	mJobSeconds.Observe(time.Since(t0).Seconds(), job.Kind)
 	return true, db.WithTenant(ctx, a.DB, job.Tenant, func(tx *sql.Tx) error { return store.FinishJob(ctx, tx, job.ID, jobErr, job.Attempts, job.Max) })

@@ -1,0 +1,421 @@
+{
+ "company": {
+  "edges": 3327,
+  "humans": 2000,
+  "identities": {
+   "ai_agent": 98,
+   "human": 2124,
+   "oauth_app": 38,
+   "service_account": 93
+  },
+  "seed": 1
+ },
+ "decisions": {
+  "all_cores_per_second": 579890,
+  "cpus": 2,
+  "latency_us": {
+   "max": 1330.523,
+   "p50": 2.72,
+   "p95": 8.664,
+   "p99": 18.913
+  },
+  "outcomes": {
+   "allow": 108309,
+   "deny": 86251,
+   "require_approval": 5440
+  },
+  "setup": "5000 people, 245 agents, 200000 decisions, in-process (no HTTP)",
+  "single_core_per_second": 273205
+ },
+ "detection": {
+  "graph_engine": {
+   "false_positives": 0,
+   "precision": 1,
+   "recall": 1,
+   "true_positives": 575
+  },
+  "naive_scanner": {
+   "false_positives": 1645,
+   "precision": 0.242,
+   "recall": 0.913,
+   "true_positives": 525
+  }
+ },
+ "generated": "irg dashboard (synthetic company, seed 1)",
+ "open": {
+  "critical": 32,
+  "high": 83
+ },
+ "rules": [
+  {
+   "rule": "privilege_escalation",
+   "title": "Can grant itself more privileges",
+   "open": 13,
+   "critical": 13,
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.8.2"
+   ]
+  },
+  {
+   "rule": "toxic_combination",
+   "title": "Can change production and erase the audit trail",
+   "open": 11,
+   "critical": 11,
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ]
+  },
+  {
+   "rule": "ai_agent_risk",
+   "title": "AI agent without owner or with destructive standing access",
+   "open": 18,
+   "critical": 8,
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.5.15",
+    "ISO27001 A.8.2"
+   ]
+  },
+  {
+   "rule": "offboarding_gap",
+   "title": "Left the company, account still active",
+   "open": 20,
+   "critical": 0,
+   "controls": [
+    "SOC2 CC6.2",
+    "SOC2 CC6.3",
+    "ISO27001 A.5.16",
+    "ISO27001 A.5.18"
+   ]
+  },
+  {
+   "rule": "stale_credential",
+   "title": "Long-lived credential older than 90 days with write access",
+   "open": 16,
+   "critical": 0,
+   "controls": [
+    "SOC2 CC6.1",
+    "ISO27001 A.5.17"
+   ]
+  },
+  {
+   "rule": "dormant_privileged",
+   "title": "Dormant identity with production access",
+   "open": 13,
+   "critical": 0,
+   "controls": [
+    "SOC2 CC6.2",
+    "SOC2 CC6.3",
+    "ISO27001 A.5.18",
+    "ISO27001 A.8.2"
+   ]
+  },
+  {
+   "rule": "privileged_without_mfa",
+   "title": "Production access without MFA",
+   "open": 10,
+   "critical": 0,
+   "controls": [
+    "SOC2 CC6.1",
+    "ISO27001 A.8.5"
+   ]
+  },
+  {
+   "rule": "risky_oauth_app",
+   "title": "Unverified third-party app with broad data access",
+   "open": 8,
+   "critical": 0,
+   "controls": [
+    "SOC2 CC6.6",
+    "SOC2 CC9.2",
+    "ISO27001 A.5.19",
+    "ISO27001 A.5.23"
+   ]
+  },
+  {
+   "rule": "external_privileged",
+   "title": "External identity with production access",
+   "open": 6,
+   "critical": 0,
+   "controls": [
+    "SOC2 CC6.6",
+    "ISO27001 A.5.19",
+    "ISO27001 A.8.2"
+   ]
+  }
+ ],
+ "siem": {
+  "agent_decisions": 50000,
+  "audit_events": 2000,
+  "busy_replies": 29,
+  "decisions_to_export": 19909,
+  "duplicate_deliveries": 400,
+  "events_expected": 21909,
+  "events_from_other_tenants": 0,
+  "events_missing": 0,
+  "events_per_second": 15495.084170578748,
+  "events_stored_at_least_once": 21909,
+  "injected_busy_share": 0.2,
+  "injected_lost_ack_share": 0.03,
+  "lost_acknowledgements": 2,
+  "plain_allows_exported": 0,
+  "requests": 141,
+  "rounds": 2,
+  "seconds": 1.4139323
+ },
+ "top": [
+  {
+   "id": "f_2c511ae8d6a59a60",
+   "title": "svc-00092 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00092",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "svc-00092 → role:CIRunner → role:InfraAdmin → delete prod-core (allowed by InfraAdmin/stmt0)",
+    "svc-00092 → role:CIRunner → role:InfraAdmin → tamper org-trail (allowed by InfraAdmin/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_2d02189bd6e0159b",
+   "title": "svc-00089 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00089",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "svc-00089 → role:CIRunner → role:InfraAdmin → delete prod-core (allowed by InfraAdmin/stmt0)",
+    "svc-00089 → role:CIRunner → role:InfraAdmin → tamper org-trail (allowed by InfraAdmin/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_34dfaeeee1df455a",
+   "title": "svc-00090 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00090",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "svc-00090 → role:CIRunner → role:InfraAdmin → delete prod-core (allowed by InfraAdmin/stmt0)",
+    "svc-00090 → role:CIRunner → role:InfraAdmin → tamper org-trail (allowed by InfraAdmin/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_5cf57e9f12a6a0b2",
+   "title": "svc-00093 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00093",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "svc-00093 → role:CIRunner → role:InfraAdmin → delete prod-core (allowed by InfraAdmin/stmt0)",
+    "svc-00093 → role:CIRunner → role:InfraAdmin → tamper org-trail (allowed by InfraAdmin/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_97831d4eeb7335b8",
+   "title": "svc-00091 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00091",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "svc-00091 → role:CIRunner → role:InfraAdmin → delete prod-core (allowed by InfraAdmin/stmt0)",
+    "svc-00091 → role:CIRunner → role:InfraAdmin → tamper org-trail (allowed by InfraAdmin/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_a7a26b5e16223053",
+   "title": "svc-00091 can grant itself more privileges (iam:AttachRolePolicy)",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00091",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "via svc-00091 → role:CIRunner → role:InfraAdmin → iam:AttachRolePolicy"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.8.2"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_b7ba646ad4821603",
+   "title": "svc-00090 can grant itself more privileges (iam:AttachRolePolicy)",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00090",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "via svc-00090 → role:CIRunner → role:InfraAdmin → iam:AttachRolePolicy"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.8.2"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_c153b887205a53f7",
+   "title": "svc-00093 can grant itself more privileges (iam:AttachRolePolicy)",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00093",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "via svc-00093 → role:CIRunner → role:InfraAdmin → iam:AttachRolePolicy"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.8.2"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_d63d30443a9b8855",
+   "title": "svc-00092 can grant itself more privileges (iam:AttachRolePolicy)",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00092",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "via svc-00092 → role:CIRunner → role:InfraAdmin → iam:AttachRolePolicy"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.8.2"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_f9f9132ecd1bbc38",
+   "title": "svc-00089 can grant itself more privileges (iam:AttachRolePolicy)",
+   "severity": "critical",
+   "score": 100,
+   "subject": "svc-00089",
+   "kind": "service_account",
+   "blast_radius": 7,
+   "evidence": [
+    "via svc-00089 → role:CIRunner → role:InfraAdmin → iam:AttachRolePolicy"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "ISO27001 A.8.2"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_01d9ea2379955617",
+   "title": "svc-00084 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 96,
+   "subject": "svc-00084",
+   "kind": "service_account",
+   "blast_radius": 3,
+   "evidence": [
+    "svc-00084 → role:OpsAutomation → delete prod-customer-data (allowed by OpsAutomation/stmt0)",
+    "svc-00084 → role:OpsAutomation → tamper org-trail (allowed by OpsAutomation/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  },
+  {
+   "id": "f_1a3e7342636a8d21",
+   "title": "svc-00086 can change production data and erase the audit trail",
+   "severity": "critical",
+   "score": 96,
+   "subject": "svc-00086",
+   "kind": "service_account",
+   "blast_radius": 3,
+   "evidence": [
+    "svc-00086 → role:OpsAutomation → delete prod-customer-data (allowed by OpsAutomation/stmt0)",
+    "svc-00086 → role:OpsAutomation → tamper org-trail (allowed by OpsAutomation/stmt0)"
+   ],
+   "controls": [
+    "SOC2 CC6.3",
+    "SOC2 CC7.2",
+    "ISO27001 A.5.3",
+    "ISO27001 A.8.15"
+   ],
+   "fix": [
+    "unassign_role"
+   ]
+  }
+ ]
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/pdp"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/risk"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/store"
+	"github.com/manojrevenkar12-web/identity-risk-graph/internal/trace"
 )
 
 type ctxKey struct{}
@@ -149,9 +150,21 @@ func (a *App) wrap(pattern, minRole string, h func(http.ResponseWriter, *http.Re
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t0 := time.Now()
 		sw := &statusWriter{ResponseWriter: w, code: 200}
+		ctx, span := trace.Start(trace.Extract(r.Context(), r.Header), pattern, trace.Server,
+			trace.String("http.request.method", r.Method), trace.String("http.route", pattern),
+			trace.String("url.path", r.URL.Path))
+		r = r.WithContext(ctx)
+		if span != nil {
+			sw.Header().Set("traceparent", trace.FormatTraceparent(span.Context()))
+		}
 		defer func() {
 			mHTTP.Inc(pattern, strconv.Itoa(sw.code))
 			mHTTPLat.Observe(time.Since(t0).Seconds(), pattern)
+			span.SetAttributes(trace.Int("http.response.status_code", sw.code))
+			if sw.code >= 500 {
+				span.Fail(http.StatusText(sw.code))
+			}
+			span.End()
 		}()
 		p, err := a.authenticate(r)
 		if err != nil {
@@ -163,6 +176,7 @@ func (a *App) wrap(pattern, minRole string, h func(http.ResponseWriter, *http.Re
 			writeErr(sw, errf(429, "rate_limited", "too many requests"))
 			return
 		}
+		span.SetAttributes(trace.String("irg.tenant", p.Tenant), trace.String("enduser.role", p.Role))
 		if !permitted(p.Role, minRole) {
 			writeErr(sw, errf(403, "forbidden", "role "+p.Role+" cannot call this endpoint"))
 			return
@@ -599,9 +613,14 @@ func (a *App) decide(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	_, span := trace.Start(r.Context(), "pdp.decide", trace.Internal,
+		trace.String("irg.agent.id", req.Agent), trace.String("irg.agent.action", req.Action),
+		trace.String("irg.agent.resource", req.Resource))
 	t0 := time.Now()
 	d := te.e.Decide(req)
 	mDecLat.Observe(time.Since(t0).Seconds(), d.Decision)
+	span.SetAttributes(trace.String("irg.decision", d.Decision), trace.String("irg.decision.reason", d.Reason))
+	span.End()
 	mDecisions.Inc(d.Decision)
 	writeJSON(w, 200, d)
 	return nil

@@ -12,11 +12,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/lib/pq"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/model"
+	"github.com/manojrevenkar12-web/identity-risk-graph/internal/trace"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -292,8 +294,19 @@ type Job struct {
 	Max      int
 }
 
+// Enqueue stores a job. When ctx carries a trace, its traceparent rides in the payload, so the
+// worker's spans join the trace of the request (or job) that caused them.
 func Enqueue(ctx context.Context, tx *sql.Tx, tenant, kind string, payload any, after time.Duration) (int64, error) {
 	b, _ := json.Marshal(payload)
+	h := http.Header{}
+	trace.Inject(ctx, h)
+	if tp := h.Get("traceparent"); tp != "" {
+		var m map[string]any
+		if json.Unmarshal(b, &m) == nil && m != nil {
+			m["traceparent"] = tp
+			b, _ = json.Marshal(m)
+		}
+	}
 	var id int64
 	err := tx.QueryRowContext(ctx, "INSERT INTO jobs (tenant_id, kind, payload, run_after) VALUES ($1, $2, $3, now() + make_interval(secs => $4)) RETURNING id",
 		tenant, kind, b, after.Seconds()).Scan(&id)

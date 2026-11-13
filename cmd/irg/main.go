@@ -7,6 +7,8 @@
 //	irg estate [-humans N] [-seed S]             run the demo SaaS estate (synthetic company)
 //	irg bench [-out reports]                     detection, scale and decision benchmarks
 //	irg loadtest -keys keys.json [-c 32 -d 20s]  HTTP load test of the agent decision endpoint
+//	irg dashboard [-out web/public/data/...]     data for the CISO dashboard (web/)
+//	irg siem-drill [-out reports/siem.json]      SIEM delivery under busy replies and lost acknowledgements
 package main
 
 import (
@@ -19,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,8 +29,10 @@ import (
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/bench"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/db"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/estate"
+	"github.com/manojrevenkar12-web/identity-risk-graph/internal/siem"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/store"
 	"github.com/manojrevenkar12-web/identity-risk-graph/internal/synth"
+	"github.com/manojrevenkar12-web/identity-risk-graph/internal/trace"
 )
 
 var version = "dev" // set at build time: -ldflags "-X main.version=..."
@@ -104,6 +109,12 @@ func run(ctx context.Context, log *slog.Logger, cmd string, args []string) error
 			return fmt.Errorf("health: HTTP %d", resp.StatusCode)
 		}
 		return nil
+	case "dashboard": // data for the CISO dashboard in web/
+		fs := flag.NewFlagSet("dashboard", flag.ExitOnError)
+		out := fs.String("out", "web/public/data/dashboard.json", "output file")
+		humans := fs.Int("humans", 2000, "people in the synthetic company")
+		_ = fs.Parse(args)
+		return bench.Dashboard("reports", *out, *humans, 1)
 	case "bench":
 		fs := flag.NewFlagSet("bench", flag.ExitOnError)
 		out := fs.String("out", "reports", "report directory")
@@ -120,6 +131,24 @@ func run(ctx context.Context, log *slog.Logger, cmd string, args []string) error
 	switch cmd {
 	case "migrate":
 		return db.Migrate(ctx, d)
+	case "siem-drill": // delivery to a SIEM that is busy and loses acknowledgements (reports/siem.json)
+		fs := flag.NewFlagSet("siem-drill", flag.ExitOnError)
+		out := fs.String("out", "reports/siem.json", "report file")
+		audits := fs.Int("audit", 2000, "audit-log entries")
+		decisions := fs.Int("decisions", 50000, "agent decisions")
+		busy := fs.Float64("busy", 0.2, "share of requests answered 503")
+		lost := fs.Float64("lost", 0.03, "share of requests stored but never acknowledged")
+		_ = fs.Parse(args)
+		if err := db.Migrate(ctx, d); err != nil {
+			return err
+		}
+		res, err := siem.Drill(ctx, d, *audits, *decisions, *busy, *lost, 11)
+		if err != nil {
+			return err
+		}
+		b, _ := json.MarshalIndent(res, "", "  ")
+		log.Info("siem drill", "result", res)
+		return os.WriteFile(*out, append(b, '\n'), 0o600)
 	case "tenant":
 		if len(args) == 4 && args[0] == "create" {
 			id, key, err := store.CreateTenant(ctx, d, args[1], args[2], args[3])
@@ -134,6 +163,13 @@ func run(ctx context.Context, log *slog.Logger, cmd string, args []string) error
 		}
 		usage()
 	case "api", "worker", "all":
+		// OpenTelemetry traces go to OTEL_EXPORTER_OTLP_ENDPOINT when it is set; nothing is recorded otherwise.
+		trace.Default = trace.New(trace.FromEnv("irg-"+cmd, version))
+		defer func() {
+			shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = trace.Default.Shutdown(shut)
+		}()
 		if err := db.Migrate(ctx, d); err != nil {
 			return err
 		}
@@ -141,6 +177,11 @@ func run(ctx context.Context, log *slog.Logger, cmd string, args []string) error
 		defer a.Close()
 		if cmd != "api" {
 			go a.RunWorker(ctx)
+			if sinks := siemSinks(); len(sinks) > 0 {
+				x := &siem.Exporter{DB: d, Sinks: sinks, Log: log, IncludeAllow: os.Getenv("IRG_SIEM_INCLUDE_ALLOW") == "true"}
+				go x.Run(ctx, 15*time.Second)
+				log.Info("siem export on", "sinks", len(sinks))
+			}
 		}
 		if cmd == "worker" { // health and metrics only
 			return serve(ctx, log, cfg.WorkerAddr, a.OpsHandler())
@@ -168,6 +209,31 @@ func serve(ctx context.Context, log *slog.Logger, addr string, h http.Handler) e
 		return err
 	}
 	return nil
+}
+
+// siemSinks builds the configured SIEM sinks. Secrets come from files (*_FILE), as Kubernetes mounts them.
+func siemSinks() []siem.Sink {
+	var out []siem.Sink
+	if u := os.Getenv("IRG_SIEM_SPLUNK_URL"); u != "" {
+		out = append(out, &siem.SplunkHEC{URL: u, Token: secret("IRG_SIEM_SPLUNK_TOKEN"), Index: os.Getenv("IRG_SIEM_SPLUNK_INDEX")})
+	}
+	if e := os.Getenv("IRG_SIEM_SENTINEL_ENDPOINT"); e != "" {
+		out = append(out, &siem.Sentinel{Endpoint: e, RuleID: os.Getenv("IRG_SIEM_SENTINEL_RULE_ID"),
+			Stream: envOr("IRG_SIEM_SENTINEL_STREAM", "Custom-IrgSecurityEvents_CL"),
+			Token: &siem.AzureToken{TenantID: os.Getenv("IRG_SIEM_SENTINEL_TENANT_ID"), ClientID: os.Getenv("IRG_SIEM_SENTINEL_CLIENT_ID"),
+				ClientSecret: secret("IRG_SIEM_SENTINEL_CLIENT_SECRET")}})
+	}
+	return out
+}
+
+func secret(name string) string {
+	if f := os.Getenv(name + "_FILE"); f != "" {
+		b, err := os.ReadFile(f) //nolint:gosec // the path is operator configuration
+		if err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	return os.Getenv(name)
 }
 
 func envOr(k, d string) string {
