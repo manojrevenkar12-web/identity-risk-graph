@@ -112,7 +112,7 @@ jobs:
           mkdir -p /tmp/otel && chmod 777 /tmp/otel
           docker run -d --name otelcol -p 4318:4318 \
             -v "$PWD/deploy/observability/ci/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro" \
-            -v /tmp/otel:/out otel/opentelemetry-collector-contrib:0.115.0
+            -v /tmp/otel:/out otel/opentelemetry-collector-contrib:latest
           for i in $(seq 30); do
             code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:4318/v1/traces -H 'Content-Type: application/json' -d '{}' || true)
             [ "$code" = "200" ] && break; sleep 2
@@ -121,7 +121,7 @@ jobs:
         env: {IRG_OTLP_ENDPOINT: "http://localhost:4318", IRG_COLLECTOR_OUT: /tmp/otel/traces.jsonl}
         run: go test -tags collector -count=1 -run TestARealCollectorAcceptsOurSpans -v ./internal/trace
       - name: The production collector config is valid
-        run: docker run --rm -v "$PWD/deploy/observability/otel-collector.yaml:/c.yaml:ro" otel/opentelemetry-collector-contrib:0.115.0 validate --config=/c.yaml
+        run: docker run --rm -v "$PWD/deploy/observability/otel-collector.yaml:/c.yaml:ro" otel/opentelemetry-collector-contrib:latest validate --config=/c.yaml
       - if: failure()
         run: docker logs otelcol 2>&1 | tail -n 60
 
